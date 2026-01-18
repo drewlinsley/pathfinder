@@ -16,6 +16,24 @@ cv2.useOptimized()
 
 import snakes
 
+def _imresize(arr, size, interp='lanczos'):
+    """Replacement for deprecated scipy.misc.imresize."""
+    if interp == 'lanczos':
+        resample = Image.Resampling.LANCZOS
+    elif interp == 'nearest':
+        resample = Image.Resampling.NEAREST
+    else:
+        resample = Image.Resampling.BILINEAR
+    img = Image.fromarray(arr)
+    img = img.resize((size[1], size[0]), resample=resample)
+    return np.array(img)
+
+
+def _imsave(path, arr):
+    """Replacement for deprecated scipy.misc.imsave."""
+    img = Image.fromarray(arr)
+    img.save(path)
+
 
 # Accumulate metadata
 def accumulate_meta(array, label, subpath, filename, args, nimg, paddle_margin = None):
@@ -186,8 +204,8 @@ def initialize_two_seeds(image_size, padding, seed_distance,
 
         sample_in_rad = np.random.randint(0, 360) * np.pi / 180
         # get lists of y and x coordinates (exclude out-of-bound coordinates)
-        sample_in_y = int(np.round_(sampled_tail1[0] + (seed_distance * np.sin(sample_in_rad))))
-        sample_in_x = int(np.round_(sampled_tail1[1] + (seed_distance * np.cos(sample_in_rad))))
+        sample_in_y = int(np.round(sampled_tail1[0] + (seed_distance * np.sin(sample_in_rad))))
+        sample_in_x = int(np.round(sampled_tail1[1] + (seed_distance * np.cos(sample_in_rad))))
         sampled_tail2 = [sample_in_y, sample_in_x]
         sampled_head2 = snakes.translate_coord(sampled_tail2, sampled_orientation_in_rad2, length)
         sampled_pivot2 = snakes.translate_coord(sampled_head2, sampled_orientation_in_rad_reversed, length + margin)
@@ -227,7 +245,7 @@ def draw_circle(window_size, coordinate, radius, aa_scale):
                     -coordinate[1]*aa_scale:(window_size[1]-coordinate[1])*aa_scale]
     mask = x ** 2 + y ** 2 <= (radius*aa_scale) ** 2
     image[mask] = 1
-    return scipy.misc.imresize(image, (window_size[0], window_size[1]), interp='lanczos')
+    return _imresize(image, (window_size[0], window_size[1]), interp='lanczos')
 
 
 def from_wrapper(args):
@@ -332,21 +350,21 @@ def from_wrapper(args):
         origin_circle = draw_circle(args.window_size, origin_mark_coord, args.marker_radius, args.antialias_scale)
         terminal_circle = draw_circle(args.window_size, terminal_mark_coord, args.marker_radius, args.antialias_scale)
         if args.segmentation_task:
-            marker = origin_circle.astype(np.float) / 255
-            merker2 = terminal_circle.astype(np.float) / 255
+            marker = origin_circle.astype(np.float32) / 255.0
+            merker2 = terminal_circle.astype(np.float32) / 255.0
             image_marked = np.maximum(image, marker)
             target_segment = np.maximum(twosnakes[origin_mark_idx], marker)
             if args.segmentation_task_double_circle:
                 image_marked = np.maximum(image_marked, merker2)
                 target_segment = np.maximum(target_segment, merker2)
-            target_segment = (target_segment>0.5).astype(np.float)
+            target_segment = (target_segment>0.5).astype(np.float32)
         else:
-            markers = np.maximum(origin_circle, terminal_circle).astype(np.float) / 255
+            markers = np.maximum(origin_circle, terminal_circle).astype(np.float32) / 255.0
             image_marked = np.maximum(image, markers)
 
         if (args.pause_display):
             plt.figure(figsize=(10, 10))
-            show2 = scipy.misc.imresize(image_marked, (args.window_size[0], args.window_size[1]), interp='lanczos')
+            show2 = _imresize(image_marked, (args.window_size[0], args.window_size[1]), interp='lanczos')
             plt.imshow(show2)
             plt.colorbar()
             plt.axis('off')
@@ -354,14 +372,14 @@ def from_wrapper(args):
         if args.segmentation_task:
             if (args.save_images):
                 fn = "sample_%s.png"%(iimg)
-                scipy.misc.imsave(os.path.join(args.contour_path, contour_sub_path, fn), image_marked)
-                scipy.misc.imsave(os.path.join(args.contour_path, seg_sub_path, fn), target_segment)
+                _imsave(os.path.join(args.contour_path, contour_sub_path, fn), image_marked)
+                _imsave(os.path.join(args.contour_path, seg_sub_path, fn), target_segment)
             if (args.save_metadata):
                 metadata = accumulate_meta_segment(metadata, contour_sub_path, seg_sub_path, fn, args, iimg, paddle_margin=margin)
         else:
             if (args.save_images):
                 fn = "sample_%s.png"%(iimg)
-                scipy.misc.imsave(os.path.join(args.contour_path, contour_sub_path, fn), image_marked)
+                _imsave(os.path.join(args.contour_path, contour_sub_path, fn), image_marked)
             if (args.save_metadata):
                 metadata = accumulate_meta(metadata, label, contour_sub_path, fn, args, iimg, paddle_margin=margin)
 

@@ -12,6 +12,24 @@ import time
 import cv2
 cv2.useOptimized()
 
+def _imresize(arr, size, interp='lanczos'):
+    """Replacement for deprecated scipy.misc.imresize."""
+    if interp == 'lanczos':
+        resample = Image.Resampling.LANCZOS
+    elif interp == 'nearest':
+        resample = Image.Resampling.NEAREST
+    else:
+        resample = Image.Resampling.BILINEAR
+    img = Image.fromarray(arr)
+    img = img.resize((size[1], size[0]), resample=resample)
+    return np.array(img)
+
+
+def _imsave(path, arr):
+    """Replacement for deprecated scipy.misc.imsave."""
+    img = Image.fromarray(arr)
+    img.save(path)
+
 def save_metadata(metadata, contour_path, batch_id):
     # Converts metadata (list of lists) into an nparray, and then saves
     metadata_path = os.path.join(contour_path, 'metadata')
@@ -188,7 +206,7 @@ def seed_snake(image, mask,
         _, raw_num_available_coordinates = find_available_coordinates(np.ceil(mask-0.3), margin=0)
         available_coordinates, num_available_coordinates = find_available_coordinates(np.ceil(dilated_mask-0.3), margin=0)
         if (stop_with_availability is not None) & \
-           (np.float(raw_num_available_coordinates)/(mask.shape[0]*mask.shape[1]) < stop_with_availability):
+           (float(raw_num_available_coordinates)/(mask.shape[0]*mask.shape[1]) < stop_with_availability):
             #print('critical % of mask occupied before dilation. finalizing')
             return image, mask, np.zeros_like(mask), None, None, False
         if num_available_coordinates == 0:
@@ -269,10 +287,11 @@ def extend_snake(last_pivot, last_orientation, last_segment_mask,
                 continue
             ## TODO: ADD JITTERED ORIENTATION
         if segment_found == False:
-            print('extend_snake: self-crossing detected')
-            print('pmf of sample ='+str(pmf[0,sampled_index]))
-            print('mask at sample ='+str(dilated_mask[new_head[0],new_head[1]]))
-            print('smaple ='+str(new_head))
+            if display:
+                print('extend_snake: self-crossing detected')
+                print('pmf of sample ='+str(pmf[0,sampled_index]))
+                print('mask at sample ='+str(dilated_mask[new_head[0],new_head[1]]))
+                print('smaple ='+str(new_head))
             image = np.maximum(image, l_im)
             if display:
                 plt.subplot(1, 4, 1)
@@ -360,17 +379,17 @@ def draw_line_n_mask(im_size, start_coord, orientation, length, thickness, margi
 
     # resize with interpolation + apply contrast
     miniline_shape = (length + int(np.ceil(thickness)) + margin) *2 + 1
-    miniline_im = scipy.misc.imresize(np.array(miniline_blown_im),
-                                      (miniline_shape, miniline_shape),
-                                      interp='lanczos').astype(np.float)/255
+    miniline_im = _imresize(np.array(miniline_blown_im),
+                            (miniline_shape, miniline_shape),
+                            interp='lanczos').astype(np.float32) / 255.0
     if contrast_scale != 1.0:
         miniline_im *= contrast_scale
 
     # draw a mask
     minimask_blown_im = binary_dilate_custom(miniline_blown_im, large_dilation_struct, value_scale=1.).astype(np.uint8)
-    minimask_im = scipy.misc.imresize(np.array(minimask_blown_im),
-                        (miniline_shape, miniline_shape),
-                        interp='lanczos').astype(np.float) / 255
+    minimask_im = _imresize(np.array(minimask_blown_im),
+                            (miniline_shape, miniline_shape),
+                            interp='lanczos').astype(np.float32) / 255.0
 
     #minimask_im = binary_dilate(miniline_im, margin, type='1', scale=1.).astype(np.uint8)
 
@@ -521,13 +540,13 @@ def test():
     plt.figure(figsize=(10, 10))
     plt.subplot(2, 1, 1)
     red_target = gray2red(image1)
-    show1 = scipy.misc.imresize(red_target, (imsize, imsize), interp='lanczos')
+    show1 = _imresize(red_target, (imsize, imsize), interp='lanczos')
     plt.imshow(show1)
     plt.axis('off')
 
     plt.subplot(2, 1, 2)
     gray_total = gray2gray(1 - image3)
-    show2 = scipy.misc.imresize(gray_total, (imsize, imsize), interp='lanczos')
+    show2 = _imresize(gray_total, (imsize, imsize), interp='lanczos')
     plt.imshow(show2)
     plt.axis('off')
 
@@ -620,10 +639,10 @@ def from_wrapper(args):
 
         if (args.save_images):
             fn = "sample_%s.png"%(iimg)
-            scipy.misc.imsave(os.path.join(args.contour_path, contour_sub_path, fn), final_im)
+            _imsave(os.path.join(args.contour_path, contour_sub_path, fn), final_im)
         if (args.save_gt):
             fn = "gt_%s.png"%(iimg)
-            scipy.misc.imsave(os.path.join(args.contour_path, gt_sub_path, fn), target_im)
+            _imsave(os.path.join(args.contour_path, gt_sub_path, fn), target_im)
         if (args.save_metadata):
             metadata = accumulate_meta(metadata, contour_sub_path, fn, args, iimg, paddle_margin=margin)
             ## TODO: GT IS NOT INCLUDED IN METADATA
